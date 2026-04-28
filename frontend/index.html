@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>VolunteerAI — Smart Allocation Assistant</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg: #080b14;
+  --surface: #0e1220;
+  --surface2: #141828;
+  --border: rgba(255,255,255,0.07);
+  --accent: #00e5ff;
+  --accent2: #7b61ff;
+  --accent3: #ff6b6b;
+  --gold: #ffd166;
+  --text: #e8eaf0;
+  --text-muted: #6b7280;
+  --user-bubble: linear-gradient(135deg, #7b61ff, #00e5ff);
+  --bot-bubble: #141828;
+  --card-border: rgba(0,229,255,0.15);
+  --glow: 0 0 40px rgba(0,229,255,0.08);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Animated background */
+.bg-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.12;
+  animation: drift 18s ease-in-out infinite alternate;
+}
+.orb1 { width:500px; height:500px; background:#7b61ff; top:-100px; left:-100px; animation-delay:0s; }
+.orb2 { width:400px; height:400px; background:#00e5ff; bottom:-100px; right:-100px; animation-delay:-6s; }
+.orb3 { width:300px; height:300px; background:#ff6b6b; top:40%; left:40%; animation-delay:-12s; }
+@keyframes drift {
+  0% { transform: translate(0,0) scale(1); }
+  100% { transform: translate(40px,30px) scale(1.1); }
+}
+
+/* Grid overlay */
+.bg-grid {
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 40px 40px;
+  z-index: 0;
+}
+
+/* Main layout */
+.app {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 780px;
+  height: 96vh;
+  display: flex;
+  flex-direction: column;
+  background: rgba(14,18,32,0.85);
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 32px 80px rgba(0,0,0,0.5), var(--glow);
+}
+
+/* Header */
+.header {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(10,13,24,0.6);
+  backdrop-filter: blur(12px);
+  flex-shrink: 0;
+}
+.header-logo {
+  width: 42px; height: 42px;
+  background: linear-gradient(135deg, var(--accent2), var(--accent));
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 0 20px rgba(123,97,255,0.4);
+  flex-shrink: 0;
+}
+.header-info { flex: 1; }
+.header-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: linear-gradient(90deg, #fff, var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.header-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 1px;
+  font-weight: 300;
+}
+.status-dot {
+  width: 8px; height: 8px;
+  background: #22c55e;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #22c55e;
+  animation: pulse-dot 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes pulse-dot {
+  0%,100% { opacity:1; transform:scale(1); }
+  50% { opacity:0.6; transform:scale(0.85); }
+}
+.header-stats {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.stat-chip {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 3px 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.stat-chip span { color: var(--accent); font-weight: 600; }
+
+/* Messages area */
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  scroll-behavior: smooth;
+}
+.messages::-webkit-scrollbar { width: 4px; }
+.messages::-webkit-scrollbar-track { background: transparent; }
+.messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
+
+/* Message rows */
+.msg-row {
+  display: flex;
+  gap: 10px;
+  animation: msgIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+.msg-row.user { flex-direction: row-reverse; }
+@keyframes msgIn {
+  from { opacity:0; transform:translateY(16px) scale(0.96); }
+  to   { opacity:1; transform:translateY(0) scale(1); }
+}
+
+.avatar {
+  width: 34px; height: 34px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.avatar.bot {
+  background: linear-gradient(135deg, #1a1f35, #252b45);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 0 12px rgba(0,229,255,0.1);
+}
+.avatar.user {
+  background: linear-gradient(135deg, var(--accent2), var(--accent));
+}
+
+.msg-content { max-width: 78%; display: flex; flex-direction: column; gap: 4px; }
+.msg-row.user .msg-content { align-items: flex-end; }
+
+.bubble {
+  padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  position: relative;
+}
+.bubble.bot {
+  background: var(--bot-bubble);
+  border: 1px solid var(--border);
+  border-top-left-radius: 4px;
+}
+.bubble.user {
+  background: var(--user-bubble);
+  border-top-right-radius: 4px;
+  color: #fff;
+}
+
+/* Message actions */
+.msg-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.msg-row:hover .msg-actions { opacity: 1; }
+.msg-row.user .msg-actions { flex-direction: row-reverse; }
+
+.action-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: 'DM Sans', sans-serif;
+  display: flex; align-items: center; gap: 3px;
+}
+.action-btn:hover {
+  background: rgba(0,229,255,0.08);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.action-btn.copied { color: #22c55e; border-color: #22c55e; }
+
+/* Volunteer cards */
+.vol-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.vol-card {
+  background: rgba(20,24,40,0.9);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: all 0.2s;
+  animation: cardIn 0.4s ease both;
+}
+.vol-card:hover {
+  border-color: rgba(0,229,255,0.3);
+  background: rgba(0,229,255,0.04);
+  transform: translateX(4px);
+}
+@keyframes cardIn {
+  from { opacity:0; transform:translateX(-12px); }
+  to   { opacity:1; transform:translateX(0); }
+}
+.vol-card:nth-child(1) { animation-delay: 0.05s; }
+.vol-card:nth-child(2) { animation-delay: 0.12s; }
+.vol-card:nth-child(3) { animation-delay: 0.19s; }
+.vol-card:nth-child(4) { animation-delay: 0.26s; }
+
+.vol-avatar {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #1e2438, #2a3050);
+  border: 1px solid var(--border);
+}
+.vol-info { flex: 1; min-width: 0; }
+.vol-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vol-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 3px;
+  flex-wrap: wrap;
+}
+.tag {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(123,97,255,0.15);
+  color: #a78bfa;
+  border: 1px solid rgba(123,97,255,0.2);
+  font-weight: 500;
+}
+.dist {
+  font-size: 10px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.match-ring {
+  position: relative;
+  width: 40px; height: 40px;
+  flex-shrink: 0;
+}
+.match-ring svg { transform: rotate(-90deg); }
+.match-ring .track { fill: none; stroke: rgba(255,255,255,0.06); stroke-width: 3; }
+.match-ring .fill  { fill: none; stroke-width: 3; stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
+.match-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: 'Syne', sans-serif;
+}
+
+/* Loading */
+.loading-row { display: flex; gap: 10px; animation: msgIn 0.35s ease both; }
+.typing {
+  display: flex; gap: 5px;
+  padding: 14px 16px;
+  background: var(--bot-bubble);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  border-top-left-radius: 4px;
+}
+.typing span {
+  width: 6px; height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: typingBounce 1.2s ease-in-out infinite;
+  opacity: 0.5;
+}
+.typing span:nth-child(2) { animation-delay: 0.2s; background: var(--accent2); }
+.typing span:nth-child(3) { animation-delay: 0.4s; background: var(--accent3); }
+@keyframes typingBounce {
+  0%,60%,100% { transform:translateY(0); opacity:0.5; }
+  30% { transform:translateY(-6px); opacity:1; }
+}
+
+/* Suggestions */
+.suggestions {
+  padding: 0 20px 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.chip {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 6px 13px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'DM Sans', sans-serif;
+  white-space: nowrap;
+}
+.chip:hover {
+  background: rgba(0,229,255,0.06);
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+
+/* Input bar */
+.input-bar {
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: rgba(8,11,20,0.6);
+  flex-shrink: 0;
+}
+.input-wrap {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.input-wrap input {
+  width: 100%;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 11px 16px;
+  color: var(--text);
+  font-size: 13.5px;
+  font-family: 'DM Sans', sans-serif;
+  outline: none;
+  transition: all 0.2s;
+}
+.input-wrap input:focus {
+  border-color: rgba(0,229,255,0.3);
+  background: rgba(0,229,255,0.03);
+  box-shadow: 0 0 0 3px rgba(0,229,255,0.06);
+}
+.input-wrap input::placeholder { color: var(--text-muted); }
+
+.send-btn {
+  width: 42px; height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent2), var(--accent));
+  border: none;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s;
+  box-shadow: 0 0 20px rgba(0,229,255,0.2);
+  flex-shrink: 0;
+}
+.send-btn:hover { transform: scale(1.07); box-shadow: 0 0 28px rgba(0,229,255,0.35); }
+.send-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.send-btn svg { width:17px; height:17px; fill:#fff; }
+
+/* Edit mode */
+.edit-input {
+  width: 100%;
+  background: rgba(0,229,255,0.05);
+  border: 1px solid rgba(0,229,255,0.3);
+  border-radius: 10px;
+  padding: 8px 12px;
+  color: var(--text);
+  font-size: 13.5px;
+  font-family: 'DM Sans', sans-serif;
+  outline: none;
+  resize: none;
+}
+.edit-actions { display:flex; gap:6px; margin-top:5px; }
+.edit-save, .edit-cancel {
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: none;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+.edit-save { background: var(--accent); color: #000; }
+.edit-save:hover { background: #00ccee; }
+.edit-cancel { background: rgba(255,255,255,0.08); color: var(--text-muted); }
+.edit-cancel:hover { background: rgba(255,255,255,0.12); }
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: #22c55e;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 20px;
+  opacity: 0;
+  transition: all 0.3s;
+  z-index: 999;
+  pointer-events: none;
+  font-family: 'DM Sans', sans-serif;
+}
+.toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="bg-canvas">
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+</div>
+<div class="bg-grid"></div>
+
+<div class="app">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-logo">🤝</div>
+    <div class="header-info">
+      <div class="header-title">VolunteerAI</div>
+      <div class="header-sub">Smart Resource Allocation Assistant</div>
+    </div>
+    <div class="header-stats">
+      <div class="stat-chip"><span>10</span> Volunteers</div>
+      <div class="stat-chip"><span>8</span> Available</div>
+    </div>
+    <div class="status-dot"></div>
+  </div>
+
+  <!-- Messages -->
+  <div class="messages" id="messages">
+    <div class="msg-row" style="animation-delay:0.1s">
+      <div class="avatar bot">🤖</div>
+      <div class="msg-content">
+        <div class="bubble bot">
+          Hello! I'm <strong>VolunteerAI</strong> — your intelligent resource allocation assistant.<br><br>
+          Describe your event and location, and I'll instantly match the most suitable volunteers by <em>skill, proximity, and availability</em>.<br><br>
+          Try: <span style="color:var(--accent);font-style:italic">"Need medical volunteers in Chennai for a health camp"</span>
+        </div>
+        <div class="msg-actions">
+          <button class="action-btn" onclick="copyMsg(this, 'Hello! I\'m VolunteerAI')">📋 Copy</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Suggestions -->
+  <div class="suggestions">
+    <button class="chip" onclick="useSuggestion('Need medical volunteers for health camp')">🏥 Health Camp</button>
+    <button class="chip" onclick="useSuggestion('Need teaching volunteers for school program')">📚 Education</button>
+    <button class="chip" onclick="useSuggestion('Need logistics volunteers for flood relief')">🚚 Flood Relief</button>
+    <button class="chip" onclick="useSuggestion('Need IT volunteers for technical support')">💻 Tech Support</button>
+    <button class="chip" onclick="useSuggestion('Need nursing volunteers for elderly care')">🩺 Elderly Care</button>
+  </div>
+
+  <!-- Input -->
+  <div class="input-bar">
+    <div class="input-wrap">
+      <input type="text" id="userInput" placeholder="Describe your volunteer need..." onkeydown="handleKey(event)"/>
+    </div>
+    <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+    </button>
+  </div>
+</div>
+
+<div class="toast" id="toast">✓ Copied to clipboard</div>
+
+<script>
+const BACKEND_URL = "http://localhost:3000";
+let messageHistory = [];
+
+function useSuggestion(text) {
+  document.getElementById('userInput').value = text;
+  sendMessage();
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) sendMessage();
+}
+
+function getVolEmoji(skills) {
+  const s = skills.join(' ').toLowerCase();
+  if (s.includes('medical') || s.includes('first aid')) return '🩺';
+  if (s.includes('nursing')) return '💉';
+  if (s.includes('teaching') || s.includes('tutoring')) return '📖';
+  if (s.includes('logistics') || s.includes('driving')) return '🚗';
+  if (s.includes('it') || s.includes('tech')) return '💻';
+  if (s.includes('counseling') || s.includes('mental')) return '🧠';
+  if (s.includes('engineering') || s.includes('construction')) return '🔧';
+  if (s.includes('pharmacy')) return '💊';
+  if (s.includes('childcare')) return '👶';
+  return '🙋';
+}
+
+function getMatchColor(pct) {
+  if (pct >= 80) return '#00e5ff';
+  if (pct >= 65) return '#7b61ff';
+  return '#ffd166';
+}
+
+function buildMatchRing(pct) {
+  const r = 16, circ = 2 * Math.PI * r;
+  const offset = circ - (pct / 100) * circ;
+  const color = getMatchColor(pct);
+  return `<div class="match-ring">
+    <svg width="40" height="40" viewBox="0 0 40 40">
+      <circle class="track" cx="20" cy="20" r="${r}"/>
+      <circle class="fill" cx="20" cy="20" r="${r}"
+        stroke="${color}"
+        stroke-dasharray="${circ}"
+        stroke-dashoffset="${offset}"/>
+    </svg>
+    <div class="match-label" style="color:${color}">${pct}%</div>
+  </div>`;
+}
+
+function parseVolunteers(text) {
+  const lines = text.split('\n');
+  const cards = [];
+  for (const line of lines) {
+    const m = line.match(/[-•]\s+(.+?)\s+\((.+?)\|\s*(.+?)\)\s*[—\-–]+\s*Match:\s*(\d+)%/i);
+    if (m) {
+      const skills = m[2].trim().split(',').map(s => s.trim()).filter(Boolean);
+      cards.push({ name: m[1].trim(), skills, dist: m[3].trim(), match: parseInt(m[4]) });
+    }
+  }
+  return cards;
+}
+
+function renderBotMessage(text) {
+  const cards = parseVolunteers(text);
+  if (cards.length === 0) {
+    return `<div class="bubble bot">${text.replace(/\n/g,'<br>')}</div>`;
+  }
+  const header = text.split('\n')[0] || 'Best matched volunteers:';
+  let html = `<div class="bubble bot"><div style="margin-bottom:10px;font-size:13px;color:var(--text-muted)">${header}</div>
+  <div class="vol-grid">`;
+  cards.forEach(c => {
+    const emoji = getVolEmoji(c.skills);
+    const tags = c.skills.slice(0,2).map(s => `<span class="tag">${s}</span>`).join('');
+    html += `<div class="vol-card">
+      <div class="vol-avatar">${emoji}</div>
+      <div class="vol-info">
+        <div class="vol-name">${c.name}</div>
+        <div class="vol-meta">${tags}<span class="dist">📍 ${c.dist}</span></div>
+      </div>
+      ${buildMatchRing(c.match)}
+    </div>`;
+  });
+  html += `</div></div>`;
+  return html;
+}
+
+function addMessage(text, type, rawText) {
+  const msgs = document.getElementById('messages');
+  const id = 'msg_' + Date.now();
+  const row = document.createElement('div');
+  row.className = `msg-row ${type}`;
+  row.id = id;
+
+  const raw = rawText || text;
+  const avatarIcon = type === 'bot' ? '🤖' : '👤';
+
+  if (type === 'bot') {
+    row.innerHTML = `
+      <div class="avatar bot">${avatarIcon}</div>
+      <div class="msg-content">
+        ${renderBotMessage(text)}
+        <div class="msg-actions">
+          <button class="action-btn" onclick="copyMsg(this, \`${raw.replace(/`/g,'\\`')}\`)">📋 Copy</button>
+        </div>
+      </div>`;
+  } else {
+    row.innerHTML = `
+      <div class="avatar user">${avatarIcon}</div>
+      <div class="msg-content">
+        <div class="bubble user" id="bubble_${id}">${text}</div>
+        <div class="msg-actions">
+          <button class="action-btn" onclick="editMsg('${id}', \`${raw.replace(/`/g,'\\`')}\`)">✏️ Edit</button>
+          <button class="action-btn" onclick="resendMsg(\`${raw.replace(/`/g,'\\`')}\`)">🔄 Resend</button>
+          <button class="action-btn" onclick="copyMsg(this, \`${raw.replace(/`/g,'\\`')}\`)">📋 Copy</button>
+        </div>
+      </div>`;
+  }
+
+  msgs.appendChild(row);
+  msgs.scrollTop = msgs.scrollHeight;
+  return id;
+}
+
+function addLoading() {
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'loading-row';
+  div.id = 'loading';
+  div.innerHTML = `
+    <div class="avatar bot">🤖</div>
+    <div class="typing"><span></span><span></span><span></span></div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function removeLoading() {
+  const el = document.getElementById('loading');
+  if (el) el.remove();
+}
+
+function copyMsg(btn, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    btn.classList.add('copied');
+    btn.textContent = '✓ Copied';
+    showToast();
+    setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = '📋 Copy'; }, 2000);
+  });
+}
+
+function showToast() {
+  const t = document.getElementById('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+function resendMsg(text) {
+  document.getElementById('userInput').value = text;
+  sendMessage();
+}
+
+function editMsg(rowId, originalText) {
+  const row = document.getElementById(rowId);
+  const content = row.querySelector('.msg-content');
+  content.innerHTML = `
+    <textarea class="edit-input" rows="2">${originalText}</textarea>
+    <div class="edit-actions">
+      <button class="edit-save" onclick="saveEdit('${rowId}')">Save & Resend</button>
+      <button class="edit-cancel" onclick="cancelEdit('${rowId}', \`${originalText.replace(/`/g,'\\`')}\`)">Cancel</button>
+    </div>`;
+  content.querySelector('textarea').focus();
+}
+
+function cancelEdit(rowId, original) {
+  const row = document.getElementById(rowId);
+  const content = row.querySelector('.msg-content');
+  content.innerHTML = `
+    <div class="bubble user" id="bubble_${rowId}">${original}</div>
+    <div class="msg-actions">
+      <button class="action-btn" onclick="editMsg('${rowId}', \`${original.replace(/`/g,'\\`')}\`)">✏️ Edit</button>
+      <button class="action-btn" onclick="resendMsg(\`${original.replace(/`/g,'\\`')}\`)">🔄 Resend</button>
+      <button class="action-btn" onclick="copyMsg(this, \`${original.replace(/`/g,'\\`')}\`)">📋 Copy</button>
+    </div>`;
+}
+
+function saveEdit(rowId) {
+  const row = document.getElementById(rowId);
+  const newText = row.querySelector('textarea').value.trim();
+  if (!newText) return;
+  // Remove this message and everything after it
+  const msgs = document.getElementById('messages');
+  const allRows = [...msgs.querySelectorAll('.msg-row, .loading-row')];
+  const idx = allRows.indexOf(row);
+  allRows.slice(idx).forEach(r => r.remove());
+  // Resend
+  document.getElementById('userInput').value = newText;
+  sendMessage();
+}
+
+async function sendMessage() {
+  const input = document.getElementById('userInput');
+  const btn = document.getElementById('sendBtn');
+  const message = input.value.trim();
+  if (!message) return;
+
+  addMessage(message, 'user');
+  input.value = '';
+  btn.disabled = true;
+  addLoading();
+
+  try {
+    const res = await fetch(`${BACKEND_URL}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message })
+    });
+    const data = await res.json();
+    removeLoading();
+    if (data.reply) {
+      addMessage(data.reply, 'bot');
+    } else {
+      addMessage('⚠️ ' + (data.error || 'Something went wrong.'), 'bot');
+    }
+  } catch {
+    removeLoading();
+    addMessage('❌ Cannot connect to backend. Make sure the server is running on localhost:3000', 'bot');
+  } finally {
+    btn.disabled = false;
+    input.focus();
+  }
+}
+</script>
+</body>
+</html>
